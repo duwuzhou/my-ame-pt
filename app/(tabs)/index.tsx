@@ -18,6 +18,12 @@ const GAMES = [
     description: '躲避障碍，跑得更远',
     icon: '🦘',
   },
+  {
+    id: 'tydxn',
+    name: '跳跃的小鸟',
+    description: '穿越管道，挑战高分',
+    icon: '🐦',
+  },
 ];
 
 export default function HomeScreen() {
@@ -63,6 +69,16 @@ export default function HomeScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <View style={styles.comingSoon}>
+          <ThemedText style={styles.comingSoonIcon}>🎁</ThemedText>
+          <ThemedText type="defaultSemiBold" style={styles.comingSoonTitle}>
+            更多游戏即将上线
+          </ThemedText>
+          <ThemedText style={styles.comingSoonText}>
+            我们正在努力开发更多有趣的小游戏，敬请期待！
+          </ThemedText>
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -89,7 +105,7 @@ const styles = StyleSheet.create({
   gamesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    justifyContent: 'space-between',
   },
   gameCard: {
     backgroundColor: '#0ea5e9',
@@ -97,6 +113,7 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 16,
   },
   gameIcon: {
     width: 64,
@@ -120,5 +137,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.9,
     color: '#ffffff',
+  },
+  comingSoon: {
+    marginTop: 32,
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    alignItems: 'center',
+  },
+  comingSoonIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  comingSoonTitle: {
+    fontSize: 18,
+    marginBottom: 8,
+  },
+  comingSoonText: {
+    fontSize: 14,
+    opacity: 0.7,
+    textAlign: 'center',
   },
 });

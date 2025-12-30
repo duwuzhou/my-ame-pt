@@ -13,6 +13,10 @@ const GAMES: Record<string, { name: string; htmlFile: string }> = {
     name: '跳跃前进',
     htmlFile: '/html/tiaoyue.html',
   },
+  'tydxn': {
+    name: '跳跃的小鸟',
+    htmlFile: '/html/tydxn.html',
+  },
 };
 
 export default function GameScreen() {

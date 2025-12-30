@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2048 小游戏</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    :root { 
+      --gap: 12px; 
+      --radius: 14px; 
+      --primary-blue: #0ea5e9;
+      --dark-blue: #0369a1;
+    }
+    body { 
+      background: radial-gradient(1200px 800px at 50% 0%, #f0f9ff 0%, #e0f2fe 50%, #dbeafe 100%); 
+    }
+    .board {
+      touch-action: none;
+      background: linear-gradient(145deg, #7dd3fc 0%, #0ea5e9 100%);
+      border-radius: var(--radius);
+      padding: var(--gap);
+      box-shadow: 0 20px 50px rgba(14, 165, 233, 0.3), inset 0 0 20px rgba(255, 255, 255, 0.2);
+    }
+    .cell {
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 10px;
+      box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    .tile {
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      line-height: 1;
+      user-select: none;
+      box-shadow: 0 4px 10px rgba(2, 132, 199, 0.2), inset 0 -3px 0 rgba(0, 0, 0, 0.1);
+      transform: translateZ(0);
+      transition: transform 120ms ease, left 100ms ease, top 100ms ease;
+    }
+    .tile.pop { animation: pop 200ms ease-out; }
+    .tile.merge { animation: merge 200ms ease-out; }
+
+    @keyframes pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    @keyframes merge {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+
+    /* 蓝色系色阶 - 更加自然且深邃 */
+    .t2    { background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); color: #0369a1; }
+    .t4    { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; }
+    .t8    { background: linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%); color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .t16   { background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%); color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .t32   { background: linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%); color: #ffffff; }
+    .t64   { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%); color: #ffffff; }
+    .t128  { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; box-shadow: 0 0 15px rgba(2, 132, 199, 0.4); }
+    .t256  { background: linear-gradient(135deg, #0369a1 0%, #075985 100%); color: #ffffff; box-shadow: 0 0 20px rgba(3, 105, 161, 0.4); }
+    .t512  { background: linear-gradient(135deg, #075985 0%, #0c4a6e 100%); color: #ffffff; }
+    .t1024 { background: linear-gradient(135deg, #0c4a6e 0%, #1e3a8a 100%); color: #ffffff; }
+    .t2048 { background: linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%); color: #ffffff; box-shadow: 0 0 25px rgba(30, 58, 138, 0.5); }
+    .t4096 { background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); color: #ffffff; }
+    .t8192 { background: linear-gradient(135deg, #0f172a 0%, #020617 100%); color: #ffffff; }
+
+    .shadow-soft { box-shadow: 0 8px 18px rgba(2, 6, 23, 0.1); }
+    .btn-blue { background: #0ea5e9; color: white; transition: all 0.2s; }
+    .btn-blue:hover { background: #0284c7; transform: translateY(-1px); }
+    .btn-blue:active { transform: translateY(0); }
+
+    /* Prevent selecting on mobile */
+    * { -webkit-tap-highlight-color: transparent; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .tile { transition: none; }
+    }
+  </style>
+</head>
+<body class="min-h-dvh text-slate-900">
+  <div class="max-w-xl mx-auto p-4 sm:p-6">
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="text-4xl sm:text-5xl font-black tracking-tight">2048</h1>
+        <p class="text-slate-600 mt-1">方向键/WASD 或滑动来合并数字。目标：2048。</p>
+      </div>
+      <div class="flex items-stretch gap-3">
+        <div class="bg-sky-50/90 backdrop-blur rounded-xl px-4 py-2 shadow-soft border border-sky-100">
+          <div class="text-xs font-bold text-sky-600 uppercase tracking-wider">得分</div>
+          <div id="score" class="text-2xl font-black tabular-nums text-sky-900">0</div>
+        </div>
+        <div class="bg-sky-50/90 backdrop-blur rounded-xl px-4 py-2 shadow-soft border border-sky-100">
+          <div class="text-xs font-bold text-sky-600 uppercase tracking-wider">最高分</div>
+          <div id="best" class="text-2xl font-black tabular-nums text-sky-900">0</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="mt-5">
+      <div class="flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="newGame" class="px-6 py-2.5 rounded-xl btn-blue font-bold shadow-soft active:scale-[.97]">新游戏</button>
+            <button id="undo" class="px-6 py-2.5 rounded-xl bg-white/90 text-sky-700 font-bold shadow-soft hover:bg-white border border-sky-100 active:scale-[.97]" title="撤销一步">撤销</button>
+          </div>
+          <div class="flex items-center gap-2 bg-sky-50/50 p-1 rounded-xl border border-sky-100">
+            <button data-size="3" class="size-btn px-3 py-1 rounded-lg text-sm font-bold transition-all">3x3</button>
+            <button data-size="4" class="size-btn px-3 py-1 rounded-lg text-sm font-bold transition-all bg-white shadow-sm ring-1 ring-sky-200">4x4</button>
+            <button data-size="5" class="size-btn px-3 py-1 rounded-lg text-sm font-bold transition-all">5x5</button>
+            <button data-size="6" class="size-btn px-3 py-1 rounded-lg text-sm font-bold transition-all">6x6</button>
+          </div>
+        </div>
+        <div class="text-xs text-sky-700/70">提示：按 <span class="font-bold text-sky-800">R</span> 重开，<span class="font-bold text-sky-800">Ctrl+Z</span> 撤销</div>
+      </div>
+
+      <section class="relative mt-4">
+        <div id="board" class="board select-none" aria-label="2048 游戏棋盘" role="application"></div>
+
+        <div id="overlay" class="absolute inset-0 hidden rounded-[14px] p-4 sm:p-6">
+          <div class="absolute inset-0 rounded-[14px] bg-white/70 backdrop-blur"></div>
+          <div class="relative z-10 h-full flex flex-col items-center justify-center text-center">
+            <div id="overlayTitle" class="text-3xl sm:text-4xl font-black"></div>
+            <div id="overlaySubtitle" class="mt-2 text-slate-700"></div>
+            <div class="mt-5 flex gap-3">
+              <button id="keepGoing" class="hidden px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold shadow-soft hover:bg-slate-800">继续</button>
+              <button id="tryAgain" class="px-4 py-2 rounded-xl bg-white font-semibold shadow-soft hover:bg-slate-50">再来一局</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="mt-5 text-sm text-slate-600 leading-relaxed">
+        <p><span class="font-semibold">操作</span>：方向键 / WASD；移动端在棋盘上滑动。</p>
+        <p><span class="font-semibold">规则</span>：相同数字相撞合并为更大数字，得分为合并生成的数字之和。</p>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      let CURRENT_SIZE = 4;
+      const STORAGE_KEY = 'mini2048_v1';
+      const BEST_KEY = 'mini2048_best_v1';
+
+      const $board = document.getElementById('board');
+      const $score = document.getElementById('score');
+      const $best = document.getElementById('best');
+      const $overlay = document.getElementById('overlay');
+      const $overlayTitle = document.getElementById('overlayTitle');
+      const $overlaySubtitle = document.getElementById('overlaySubtitle');
+      const $keepGoing = document.getElementById('keepGoing');
+
+      const $newGame = document.getElementById('newGame');
+      const $tryAgain = document.getElementById('tryAgain');
+      const $undo = document.getElementById('undo');
+      const $sizeBtns = document.querySelectorAll('.size-btn');
+
+      let state = null;
+      let prevState = null; // for undo
+
+      function emptyGrid(size = CURRENT_SIZE) {
+        return Array.from({ length: size }, () => Array(size).fill(0));
+      }
+
+      function cloneGrid(grid) {
+        return grid.map(row => row.slice());
+      }
+
+      function loadBest() {
+        const v = Number(localStorage.getItem(BEST_KEY) || '0');
+        return Number.isFinite(v) ? v : 0;
+      }
+
+      function setBest(v) {
+        localStorage.setItem(BEST_KEY, String(v));
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch {}
+      }
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return null;
+          const s = JSON.parse(raw);
+          if (!s || !Array.isArray(s.grid)) return null;
+          const size = s.grid.length;
+          // 验证每行都有正确的列数
+          for (let r = 0; r < size; r++) {
+            if (!Array.isArray(s.grid[r]) || s.grid[r].length !== size) {
+              return null;
+            }
+          }
+          return s;
+        } catch {
+          return null;
+        }
+      }
+
+      function randChoice(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+      }
+
+      function getEmptyCells(grid) {
+        const size = grid.length;
+        const cells = [];
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (grid[r][c] === 0) cells.push([r, c]);
+          }
+        }
+        return cells;
+      }
+
+      function addRandomTile(grid) {
+        const empties = getEmptyCells(grid);
+        if (!empties.length) return null;
+        const [r, c] = randChoice(empties);
+        const value = Math.random() < 0.9 ? 2 : 4;
+        grid[r][c] = value;
+        return { r, c, value };
+      }
+
+      function canMove(grid) {
+        const size = grid.length;
+        if (getEmptyCells(grid).length) return true;
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            const v = grid[r][c];
+            if (v === 0) continue;
+            if (r + 1 < size && grid[r + 1][c] === v) return true;
+            if (c + 1 < size && grid[r][c + 1] === v) return true;
+          }
+        }
+        return false;
+      }
+
+      function has2048(grid) {
+        const size = grid.length;
+        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (grid[r][c] === 2048) return true;
+        return false;
+      }
+
+      function compressLine(line, size) {
+        const arr = line.filter(v => v !== 0);
+        let scoreGain = 0;
+        const merges = []; 
+        for (let i = 0; i < arr.length - 1; i++) {
+          if (arr[i] === arr[i + 1]) {
+            arr[i] *= 2;
+            scoreGain += arr[i];
+            merges.push(i);
+            arr.splice(i + 1, 1);
+            i++;
+          }
+        }
+        while (arr.length < size) arr.push(0);
+        return { line: arr, scoreGain, merges };
+      }
+
+      function move(dir) {
+        if (state.over) return false;
+        if (state.won && !state.keepGoing) return false;
+
+        const size = state.grid.length;
+        const before = cloneGrid(state.grid);
+        const mergeMap = Array.from({ length: size }, () => Array(size).fill(false));
+        let gained = 0;
+
+        function setRow(r, newRow, merges) {
+          state.grid[r] = newRow;
+          merges.forEach(idx => { mergeMap[r][idx] = true; });
+        }
+
+        function setCol(c, newCol, merges) {
+          for (let r = 0; r < size; r++) state.grid[r][c] = newCol[r];
+          merges.forEach(idx => { mergeMap[idx][c] = true; });
+        }
+
+        if (dir === 'left' || dir === 'right') {
+          for (let r = 0; r < size; r++) {
+            let row = state.grid[r].slice();
+            if (dir === 'right') row.reverse();
+            const res = compressLine(row, size);
+            gained += res.scoreGain;
+            let newRow = res.line;
+            if (dir === 'right') {
+              newRow = newRow.slice().reverse();
+              res.merges = res.merges.map(i => size - 1 - i);
+            }
+            setRow(r, newRow, res.merges);
+          }
+        } else {
+          for (let c = 0; c < size; c++) {
+            let col = [];
+            for (let r = 0; r < size; r++) col.push(state.grid[r][c]);
+            if (dir === 'down') col.reverse();
+            const res = compressLine(col, size);
+            gained += res.scoreGain;
+            let newCol = res.line;
+            if (dir === 'down') {
+              newCol = newCol.slice().reverse();
+              res.merges = res.merges.map(i => size - 1 - i);
+            }
+            setCol(c, newCol, res.merges);
+          }
+        }
+
+        const changed = JSON.stringify(before) !== JSON.stringify(state.grid);
+        if (!changed) return false;
+
+        prevState = {
+          grid: before,
+          score: state.score,
+          won: state.won,
+          over: state.over,
+          keepGoing: state.keepGoing
+        };
+
+        state.score += gained;
+        if (state.score > state.best) {
+          state.best = state.score;
+          setBest(state.best);
+        }
+
+        const spawned = addRandomTile(state.grid);
+        state.last = { spawned, mergeMap };
+
+        // 检查胜利条件
+        if (!state.keepGoing && !state.won && has2048(state.grid)) {
+          state.won = true;
+        }
+        
+        // 检查游戏结束条件
+        if (!canMove(state.grid)) {
+          state.over = true;
+        }
+
+        render();
+        saveState();
+        return true;
+      }
+
+      function newGame(size = CURRENT_SIZE) {
+        CURRENT_SIZE = size;
+        prevState = null;
+        
+        state = {
+          grid: emptyGrid(size),
+          score: 0,
+          best: loadBest(),
+          won: false,
+          over: false,
+          keepGoing: false,
+          last: null,
+        };
+        
+        addRandomTile(state.grid);
+        addRandomTile(state.grid);
+        
+        updateSizeUI();
+        render();
+        saveState();
+      }
+
+      function updateSizeUI() {
+        $sizeBtns.forEach(btn => {
+          const s = parseInt(btn.dataset.size);
+          if (s === CURRENT_SIZE) {
+            btn.classList.add('bg-white', 'shadow-sm', 'ring-1', 'ring-sky-200');
+          } else {
+            btn.classList.remove('bg-white', 'shadow-sm', 'ring-1', 'ring-sky-200');
+          }
+        });
+      }
+
+      function undo() {
+        if (!prevState) return;
+        state.grid = cloneGrid(prevState.grid);
+        state.score = prevState.score;
+        state.won = prevState.won;
+        state.over = prevState.over;
+        state.keepGoing = prevState.keepGoing;
+        state.last = null;
+        prevState = null;
+        render();
+        saveState();
+      }
+
+      function formatNum(n) {
+        return String(n);
+      }
+
+      function tileFontSize(value, size) {
+        const len = String(value).length;
+        if (size >= 5) {
+          if (len <= 2) return 'text-2xl sm:text-3xl';
+          if (len === 3) return 'text-xl sm:text-2xl';
+          return 'text-base sm:text-lg';
+        }
+        if (len <= 2) return 'text-4xl sm:text-5xl';
+        if (len === 3) return 'text-3xl sm:text-4xl';
+        if (len === 4) return 'text-2xl sm:text-3xl';
+        return 'text-xl sm:text-2xl';
+      }
+
+      function render() {
+        $score.textContent = formatNum(state.score);
+        $best.textContent = formatNum(state.best);
+
+        const size = state.grid.length;
+        const gap = size >= 5 ? 8 : 12;
+        const boardSize = Math.min(440, Math.max(280, Math.floor((window.innerWidth - 32))));
+        const cellSize = Math.floor((boardSize - gap * (size + 1)) / size);
+        $board.style.width = boardSize + 'px';
+        $board.style.height = boardSize + 'px';
+        $board.style.setProperty('--gap', gap + 'px');
+
+        const frag = document.createDocumentFragment();
+        const gridWrap = document.createElement('div');
+        gridWrap.className = 'relative w-full h-full';
+
+        const bg = document.createElement('div');
+        bg.className = 'absolute inset-0 grid';
+        bg.style.gridTemplateColumns = `repeat(${size}, ${cellSize}px)`;
+        bg.style.gridTemplateRows = `repeat(${size}, ${cellSize}px)`;
+        bg.style.gap = gap + 'px';
+        bg.style.padding = gap + 'px';
+        for (let i = 0; i < size * size; i++) {
+          const d = document.createElement('div');
+          d.className = 'cell';
+          bg.appendChild(d);
+        }
+
+        const tiles = document.createElement('div');
+        tiles.className = 'absolute inset-0';
+        tiles.style.padding = gap + 'px';
+
+        const spawned = state.last?.spawned;
+        const mergeMap = state.last?.mergeMap;
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            const v = state.grid[r][c];
+            if (!v) continue;
+            const tile = document.createElement('div');
+            tile.className = `tile ${tileFontSize(v, size)} t${v}`;
+            if (v > 8192) {
+              tile.style.background = '#111827';
+              tile.style.color = '#f9fafb';
+            }
+            tile.style.position = 'absolute';
+            tile.style.width = cellSize + 'px';
+            tile.style.height = cellSize + 'px';
+            tile.style.left = (c * (cellSize + gap)) + 'px';
+            tile.style.top = (r * (cellSize + gap)) + 'px';
+            tile.textContent = v;
+
+            if (spawned && spawned.r === r && spawned.c === c) {
+              tile.classList.add('pop');
+              requestAnimationFrame(() => tile.classList.remove('pop'));
+            }
+            if (mergeMap && mergeMap[r]?.[c]) {
+              tile.classList.add('merge');
+              setTimeout(() => tile.classList.remove('merge'), 140);
+            }
+            tiles.appendChild(tile);
+          }
+        }
+
+        gridWrap.appendChild(bg);
+        gridWrap.appendChild(tiles);
+        frag.appendChild(gridWrap);
+
+        $board.replaceChildren(frag);
+
+        // overlay
+        if (state.over) {
+          showOverlay('游戏结束', '没有可移动的步了。');
+          $keepGoing.classList.add('hidden');
+        } else if (state.won && !state.keepGoing) {
+          showOverlay('你赢了！', '达成 2048。你可以继续挑战更高分。');
+          $keepGoing.classList.remove('hidden');
+        } else {
+          hideOverlay();
+        }
+
+        // 更新撤销按钮状态
+        const canUndo = !!prevState;
+        $undo.disabled = !canUndo;
+        $undo.classList.toggle('opacity-50', !canUndo);
+        $undo.classList.toggle('cursor-not-allowed', !canUndo);
+        $undo.title = canUndo ? '撤销一步' : '当前没有可撤销的操作';
+      }
+
+      function showOverlay(title, subtitle) {
+        $overlayTitle.textContent = title;
+        $overlaySubtitle.textContent = subtitle;
+        $overlay.classList.remove('hidden');
+      }
+
+      function hideOverlay() {
+        $overlay.classList.add('hidden');
+      }
+
+      function keyToDir(e) {
+        const k = e.key.toLowerCase();
+        if (k === 'arrowleft' || k === 'a') return 'left';
+        if (k === 'arrowright' || k === 'd') return 'right';
+        if (k === 'arrowup' || k === 'w') return 'up';
+        if (k === 'arrowdown' || k === 's') return 'down';
+        return null;
+      }
+
+      // Input: keyboard
+      window.addEventListener('keydown', (e) => {
+        if (['arrowleft','arrowright','arrowup','arrowdown',' '].includes(e.key.toLowerCase())) e.preventDefault();
+        if (e.key.toLowerCase() === 'r') {
+          newGame();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+          undo();
+          return;
+        }
+        const dir = keyToDir(e);
+        if (dir) move(dir);
+      }, { passive: false });
+
+      // Input: touch swipe
+      let startX = 0, startY = 0, tracking = false;
+      const SWIPE_MIN = 24;
+
+      $board.addEventListener('pointerdown', (e) => {
+        tracking = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        $board.setPointerCapture?.(e.pointerId);
+      });
+
+      $board.addEventListener('pointerup', (e) => {
+        if (!tracking) return;
+        tracking = false;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        const adx = Math.abs(dx);
+        const ady = Math.abs(dy);
+        if (Math.max(adx, ady) < SWIPE_MIN) return;
+        if (adx > ady) move(dx > 0 ? 'right' : 'left');
+        else move(dy > 0 ? 'down' : 'up');
+      });
+
+      $board.addEventListener('pointercancel', () => { tracking = false; });
+
+      // Buttons
+      $newGame.addEventListener('click', () => newGame());
+      $tryAgain.addEventListener('click', () => newGame());
+      $undo.addEventListener('click', () => undo());
+      $keepGoing.addEventListener('click', () => {
+        state.keepGoing = true;
+        hideOverlay();
+        render();
+        saveState();
+      });
+
+      $sizeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const newSize = parseInt(btn.dataset.size);
+          if (newSize !== CURRENT_SIZE) {
+            if (confirm(`切换到 ${newSize}x${newSize} 模式将开始新游戏，确定吗？`)) {
+              newGame(newSize);
+            }
+          }
+        });
+      });
+
+      window.addEventListener('resize', () => render());
+
+      // Init
+      const loaded = loadState();
+      if (loaded) {
+        state = {
+          grid: loaded.grid,
+          score: Number(loaded.score || 0),
+          best: Math.max(loadBest(), Number(loaded.best || 0)),
+          won: !!loaded.won,
+          over: !!loaded.over,
+          keepGoing: !!loaded.keepGoing,
+          last: null
+        };
+        CURRENT_SIZE = state.grid.length;
+        updateSizeUI();
+        render();
+      } else {
+        newGame();
+      }
+    })();
+  </script>
+</body>
+</html>

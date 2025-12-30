@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>障碍物跳跃小游戏</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: manipulation; /* Prevent zooming on double tap */
+        }
+        
+        #game-container {
+            position: relative;
+            overflow: hidden;
+            background-color: #f7f7f7;
+            border-bottom: 2px solid #333;
+        }
+
+        #dino {
+            position: absolute;
+            bottom: 0;
+            left: 50px;
+            width: 40px;
+            height: 40px;
+            background-color: #ef4444; /* red-500 */
+            border-radius: 4px;
+        }
+
+        #obstacle {
+            position: absolute;
+            bottom: 0;
+            left: 100%; /* Start off-screen */
+            width: 30px;
+            height: 50px;
+            background-color: #333;
+            border-radius: 4px;
+        }
+
+        .cloud {
+            position: absolute;
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            opacity: 0.8;
+        }
+
+        /* Physics managed in JS now */
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-center select-none">
+
+    <div class="text-center mb-4">
+        <h1 class="text-3xl font-bold text-gray-800">跳跃小游戏</h1>
+        <p class="text-gray-600 mt-2">按 <span class="font-bold bg-white px-2 py-1 rounded shadow">空格键</span> 或 <span class="font-bold bg-white px-2 py-1 rounded shadow">点击屏幕</span> 跳跃 (支持二连跳)</p>
+    </div>
+
+    <div class="relative w-full max-w-2xl bg-white p-2 rounded-xl shadow-xl">
+        
+        <!-- Score Board -->
+        <div class="absolute top-4 right-6 z-10 text-xl font-mono font-bold text-gray-700">
+            分数: <span id="score">0</span>
+        </div>
+        
+        <!-- Game Area -->
+        <div id="game-container" class="w-full h-64 relative">
+            <div id="dino">
+                <!-- Simple Eye -->
+                <div class="absolute top-1 right-1 w-2 h-2 bg-white rounded-full"></div>
+            </div>
+            <div id="obstacle"></div>
+            
+            <!-- Decor: Clouds -->
+            <div class="cloud w-16 h-8 top-10 left-full" id="cloud1"></div>
+            <div class="cloud w-20 h-10 top-20 left-full" id="cloud2"></div>
+
+            <!-- Start/Game Over Overlay -->
+            <div id="overlay" class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-20">
+                <h2 id="overlay-title" class="text-4xl font-bold text-white mb-4">准备好了吗？</h2>
+                <button id="start-btn" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg transition transform hover:scale-105 active:scale-95 shadow-lg border-b-4 border-red-700 active:border-red-500">
+                    开始游戏
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dino = document.getElementById('dino');
+        const obstacle = document.getElementById('obstacle');
+        const scoreElement = document.getElementById('score');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const startBtn = document.getElementById('start-btn');
+        const gameContainer = document.getElementById('game-container');
+        const cloud1 = document.getElementById('cloud1');
+        const cloud2 = document.getElementById('cloud2');
+
+        // Physics variables
+        let dinoY = 0;
+        let dinoVelocity = 0;
+        const gravity = 0.6;
+        const jumpStrength = 12;
+        let jumpCount = 0;
+        const maxJumps = 2; // Allow double jump
+
+        let isGameOver = true;
+        let score = 0;
+        let obstacleSpeed = 5;
+        let obstaclePosition = 600; // Start off-screen
+        let scoreInterval;
+
+        // Sound effects (using AudioContext for simple beeps)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playJumpSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'square';
+            // Higher pitch for second jump could be fun, but keeping simple for now
+            oscillator.frequency.setValueAtTime(150 + (jumpCount * 50), audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playGameOverSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.3);
+        }
+
+        function jump(e) {
+            if (e && e.type === 'keydown' && e.code !== 'Space') return;
+            // if (e && e.type !== 'keydown') e.preventDefault(); 
+            
+            if (isGameOver) return;
+
+            if (jumpCount < maxJumps) {
+                dinoVelocity = jumpStrength;
+                jumpCount++;
+                playJumpSound();
+            }
+        }
+
+        function startGame() {
+            isGameOver = false;
+            score = 0;
+            scoreElement.innerText = score;
+            
+            // Reset positions
+            obstaclePosition = gameContainer.offsetWidth; 
+            dinoY = 0;
+            dinoVelocity = 0;
+            jumpCount = 0;
+            dino.style.bottom = '0px';
+
+            obstacleSpeed = 5;
+            
+            overlay.classList.add('hidden');
+            
+            // Start loops
+            requestAnimationFrame(gameLoop);
+            
+            // Score incrementer
+            clearInterval(scoreInterval);
+            scoreInterval = setInterval(() => {
+                if (!isGameOver) {
+                    score++;
+                    scoreElement.innerText = score;
+                    
+                    // Increase speed slightly every 100 points
+                    if (score % 100 === 0) {
+                        obstacleSpeed += 0.5;
+                    }
+                }
+            }, 100);
+            
+            // Reset Clouds
+            resetCloud(cloud1, 2);
+            resetCloud(cloud2, 3);
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            playGameOverSound();
+            clearInterval(scoreInterval);
+            overlayTitle.innerText = "游戏结束";
+            startBtn.innerText = "再玩一次";
+            overlay.classList.remove('hidden');
+        }
+
+        function resetCloud(cloud, speed) {
+            let pos = gameContainer.offsetWidth + Math.random() * 200;
+            const moveCloud = () => {
+                if (isGameOver) return;
+                pos -= speed;
+                if (pos < -100) {
+                    pos = gameContainer.offsetWidth + Math.random() * 200;
+                }
+                cloud.style.left = pos + 'px';
+                requestAnimationFrame(moveCloud);
+            }
+            moveCloud();
+        }
+
+        function gameLoop(timestamp) {
+            if (isGameOver) return;
+
+            // --- Dino Physics ---
+            dinoVelocity -= gravity;
+            dinoY += dinoVelocity;
+
+            // Ground collision
+            if (dinoY <= 0) {
+                dinoY = 0;
+                dinoVelocity = 0;
+                jumpCount = 0; // Reset jump count when hitting ground
+            }
+
+            dino.style.bottom = dinoY + 'px';
+
+
+            // --- Obstacle Logic ---
+            obstaclePosition -= obstacleSpeed;
+            
+            if (obstaclePosition < -30) {
+                obstaclePosition = gameContainer.offsetWidth;
+            }
+            
+            obstacle.style.left = obstaclePosition + 'px';
+
+            // --- Collision Detection ---
+            const dinoRect = dino.getBoundingClientRect();
+            const obstacleRect = obstacle.getBoundingClientRect();
+
+            // Simple AABB collision with buffer
+            const buffer = 8; // Slightly more forgiving
+            
+            if (
+                dinoRect.right - buffer > obstacleRect.left &&
+                dinoRect.left + buffer < obstacleRect.right &&
+                dinoRect.bottom - buffer > obstacleRect.top
+            ) {
+                gameOver();
+                return;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners
+        document.addEventListener('keydown', jump);
+        gameContainer.addEventListener('mousedown', jump);
+        gameContainer.addEventListener('touchstart', (e) => {
+            e.preventDefault(); 
+            jump();
+        }, {passive: false});
+        
+        startBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); 
+            startGame();
+        });
+
+    </script>
+</body>
+</html>

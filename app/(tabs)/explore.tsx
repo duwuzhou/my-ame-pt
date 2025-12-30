@@ -6,7 +6,7 @@ import { ThemedView } from '@/components/themed-view';
 export default function ExploreScreen() {
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Explore</ThemedText>
+      <ThemedText type="title">关于</ThemedText>
     </ThemedView>
   );
 }

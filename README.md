@@ -1,50 +1,53 @@
-# Welcome to your Expo app 👋
+# My Game PT - 小游戏合集
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+一个基于 Expo React Native 的小游戏合集应用，支持 Web 平台。
 
-## Get started
+## 游戏列表
 
-1. Install dependencies
+- **2048** - 经典数字合并游戏，滑动合并相同数字，挑战2048
+- **跳跃前进** - 躲避障碍物，跑得更远的跑酷游戏
+
+## 快速开始
+
+1. 安装依赖
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. 启动应用
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. 在浏览器中打开 Web 版本，按 `w` 键
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## 项目结构
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+my-game-pt/
+├── app/                    # 应用页面
+│   ├── (tabs)/            # Tab 导航页面
+│   │   ├── index.tsx      # 主页 - 游戏卡片列表
+│   │   └── explore.tsx    # 关于页面
+│   └── games/
+│       └── [id].tsx       # 游戏详情页
+├── public/
+│   └── html/              # 游戏 HTML 文件
+│       ├── 2048.html
+│       └── tiaoyue.html
+└── assets/                # 静态资源
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## 添加新游戏
 
-## Learn more
+1. 将游戏 HTML 文件放入 `public/html/` 目录
+2. 在 `app/(tabs)/index.tsx` 的 `GAMES` 数组中添加游戏配置
+3. 在 `app/games/[id].tsx` 的 `GAMES` 对象中添加对应配置
 
-To learn more about developing your project with Expo, look at the following resources:
+## 技术栈
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Expo / React Native
+- Expo Router (文件路由)
+- TypeScript

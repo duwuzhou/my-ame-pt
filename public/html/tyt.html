@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>跳一跳（网页版）</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    html, body { height: 100%; }
+    body { background: radial-gradient(1200px 600px at 50% 0%, #f6f8ff 0%, #eef2ff 35%, #edf2f7 100%); }
+    canvas { touch-action: none; }
+    .glass { background: rgba(255,255,255,.72); backdrop-filter: blur(10px); }
+    .shadow-soft { box-shadow: 0 12px 40px rgba(17, 24, 39, 0.14); }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="min-h-full text-slate-800">
+  <div class="max-w-5xl mx-auto p-4 md:p-6">
+    <header class="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-semibold tracking-tight">跳一跳</h1>
+        <p class="text-sm text-slate-600 mt-1">按住蓄力、松开起跳。落在下一块上得分；踩边缘、落空即失败。</p>
+      </div>
+      <div class="glass shadow-soft rounded-xl p-3 flex items-center gap-4">
+        <div>
+          <div class="text-xs text-slate-500">当前分</div>
+          <div id="score" class="text-2xl font-semibold">0</div>
+        </div>
+        <div class="h-10 w-px bg-slate-200"></div>
+        <div>
+          <div class="text-xs text-slate-500">最高分</div>
+          <div id="best" class="text-2xl font-semibold">0</div>
+        </div>
+        <button id="btnRestart" class="ml-1 px-3 py-2 rounded-lg bg-slate-900 text-white text-sm hover:bg-slate-800 active:bg-slate-950">重来</button>
+      </div>
+    </header>
+
+    <main class="mt-4 md:mt-6">
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+        <section class="glass shadow-soft rounded-2xl overflow-hidden">
+          <div class="relative">
+            <canvas id="game" class="w-full block"></canvas>
+            <div id="hint" class="absolute left-4 top-4 text-xs md:text-sm text-slate-700/90 bg-white/70 rounded-lg px-3 py-2 border border-white/60">
+              <div class="font-medium">操作</div>
+              <div class="mt-1">按住屏幕/鼠标蓄力，松开起跳</div>
+            </div>
+            <div id="toast" class="pointer-events-none absolute left-1/2 -translate-x-1/2 top-6 opacity-0 transition-opacity duration-200 text-sm bg-slate-900 text-white rounded-full px-4 py-2 shadow-lg"></div>
+          </div>
+        </section>
+
+        <aside class="glass shadow-soft rounded-2xl p-4">
+          <h2 class="font-semibold">说明</h2>
+          <ul class="mt-2 text-sm text-slate-600 space-y-2">
+            <li>• 方向会在左右/前后之间切换（与原版类似的 45° 视角）。</li>
+            <li>• 距离由按压时长决定；角色会“压缩”蓄力并出现阴影。</li>
+            <li>• 落在中心可获得更稳定的落点；落边缘易滑落。</li>
+            <li>• 支持 <span class="kbd">鼠标</span> / <span class="kbd">触摸</span>。</li>
+          </ul>
+          <div class="mt-4 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+            <div class="text-sm font-medium text-indigo-900">小技巧</div>
+            <div class="text-sm text-indigo-800 mt-1">尽量让落点接近方块中心；距离越远越需要更久蓄力。</div>
+          </div>
+
+          <div class="mt-4">
+            <div class="flex items-center justify-between">
+              <div class="text-sm font-semibold">手感微调</div>
+              <button id="btnResetTuning" class="text-xs text-slate-600 hover:text-slate-900 underline">恢复默认</button>
+            </div>
+            <div class="mt-2 space-y-3 text-sm">
+              <label class="block">
+                <div class="flex items-center justify-between"><span class="text-slate-600">蓄力倍率</span><span id="vPower" class="text-slate-800 font-medium"></span></div>
+                <input id="power" type="range" min="0.30" max="2.00" step="0.01" class="w-full" />
+              </label>
+              <label class="block">
+                <div class="flex items-center justify-between"><span class="text-slate-600">落点容错</span><span id="vForgive" class="text-slate-800 font-medium"></span></div>
+                <input id="forgive" type="range" min="0.70" max="1.15" step="0.01" class="w-full" />
+              </label>
+              <label class="block">
+                <div class="flex items-center justify-between"><span class="text-slate-600">视觉缩放</span><span id="vZoom" class="text-slate-800 font-medium"></span></div>
+                <input id="zoom" type="range" min="0.85" max="1.25" step="0.01" class="w-full" />
+              </label>
+            </div>
+          </div>
+
+          <div class="mt-5 text-xs text-slate-500 leading-relaxed">
+            提示：不同设备帧率/触控延迟会影响手感。你可以用上面的滑块调到更接近你的“原版”感觉。
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <footer class="mt-6 text-xs text-slate-500">
+      这是一个网页复刻版：核心玩法与视觉表现尽量贴近“跳一跳”，但并非官方实现。
+    </footer>
+  </div>
+
+<script>
+(() => {
+  // ---------- Helpers ----------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const now = () => performance.now();
+
+  // ---------- DOM ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const toastEl = document.getElementById('toast');
+  const btnRestart = document.getElementById('btnRestart');
+  const btnResetTuning = document.getElementById('btnResetTuning');
+
+  const powerEl = document.getElementById('power');
+  const forgiveEl = document.getElementById('forgive');
+  const zoomEl = document.getElementById('zoom');
+  const vPower = document.getElementById('vPower');
+  const vForgive = document.getElementById('vForgive');
+  const vZoom = document.getElementById('vZoom');
+
+  const LS_KEY = 'jumpjump_best_v1';
+  const LS_TUNE = 'jumpjump_tuning_v3';
+
+  // ---------- Tuning ----------
+  const tuningDefault = {
+    power: 0.45,      // 蓄力->距离倍率（默认更接近原版）
+    forgive: 0.92,    // 判定严格度（越大越严格）
+    zoom: 1.0,        // 相机缩放
+  };
+  let tuning = { ...tuningDefault };
+
+  function loadTuning() {
+    try {
+      const s = localStorage.getItem(LS_TUNE);
+      if (!s) return;
+      const obj = JSON.parse(s);
+      if (obj && typeof obj === 'object') tuning = { ...tuningDefault, ...obj };
+    } catch {}
+  }
+  function saveTuning() {
+    try { localStorage.setItem(LS_TUNE, JSON.stringify(tuning)); } catch {}
+  }
+  function applyTuningUI() {
+    powerEl.value = tuning.power;
+    forgiveEl.value = tuning.forgive;
+    zoomEl.value = tuning.zoom;
+    vPower.textContent = Number(tuning.power).toFixed(2);
+    vForgive.textContent = Number(tuning.forgive).toFixed(2);
+    vZoom.textContent = Number(tuning.zoom).toFixed(2);
+  }
+
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.style.opacity = '1';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => (toastEl.style.opacity = '0'), 900);
+  }
+
+  // ---------- View / Projection ----------
+  let DPR = 1;
+  const view = {
+    cx: 0,
+    cy: 0,
+    scale: 1,
+    isoX: 1.0,
+    isoY: 0.58,
+  };
+
+  function project(wx, wy, wz = 0) {
+    const x = (wx - wy) * view.isoX;
+    const y = (wx + wy) * view.isoY - wz;
+    return { x: x * view.scale + view.cx, y: y * view.scale + view.cy };
+  }
+
+  // ---------- Game State Machine ----------
+  const Phase = Object.freeze({ READY: 0, CHARGING: 1, JUMPING: 2, GAMEOVER: 3 });
+
+  const state = {
+    phase: Phase.READY,
+    score: 0,
+    best: 0,
+    camera: { fx: 0, fy: 0, tx: 0, ty: 0 },
+    // 下一块生成方向（在成功落到目标块后才切换一次）
+    dir: { x: 1, y: 0 },
+    input: { active: false, pointerId: null, t0: 0, power: 0 },
+    // 防止同一次落地被重复结算
+    landingLock: false,
+  };
+
+  // ---------- World Objects ----------
+  const colors = {
+    shadow: 'rgba(15, 23, 42, .22)',
+    player: '#111827',
+    playerTop: '#1f2937',
+  };
+
+  const PLATFORM = { base: 90, top: 18 };
+  const platforms = []; // always keep current at index 0, target at index 1
+
+  function platformColor(i) {
+    const palette = ['#dbeafe', '#dcfce7', '#fef9c3', '#ffe4e6', '#e9d5ff', '#cffafe'];
+    return palette[i % palette.length];
+  }
+
+  function makePlatform(x, y) {
+    const w = PLATFORM.base * (0.85 + Math.random() * 0.45);
+    const d = PLATFORM.base * (0.85 + Math.random() * 0.45);
+    return {
+      x,
+      y,
+      w,
+      d,
+      top: PLATFORM.top,
+      color: platformColor(platforms.length),
+      hasCenter: Math.random() < 0.22,
+    };
+  }
+
+  const player = {
+    x: 0,
+    y: 0,
+    z: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    squash: 0,
+    tilt: 0,
+    lastPerfect: false,
+  };
+
+  const phys = {
+    g: 2400,
+    jumpZVel: 960,
+    vMin: 320,
+    vMax: 1220,
+    chargeMaxMs: 1400,
+    // landing feel
+    edgeSlipBand: 0.10, // outside inner area but still on platform => slip fail
+  };
+
+  function loadBest() {
+    try {
+      const v = Number(localStorage.getItem(LS_KEY) || '0');
+      state.best = Number.isFinite(v) ? v : 0;
+    } catch {
+      state.best = 0;
+    }
+    updateHUD();
+  }
+  function saveBest() {
+    try { localStorage.setItem(LS_KEY, String(state.best)); } catch {}
+  }
+  function updateHUD() {
+    scoreEl.textContent = state.score;
+    bestEl.textContent = state.best;
+  }
+
+  function hardStopInput() {
+    state.input.active = false;
+    state.input.pointerId = null;
+    state.input.power = 0;
+    state.input.t0 = 0;
+  }
+
+  function pickNextDirection(prevDir) {
+    return prevDir.x === 1 ? { x: 0, y: 1 } : { x: 1, y: 0 };
+  }
+
+  function ensurePlatforms() {
+    // 保证 platforms[0] 为当前，platforms[1] 为目标
+    if (platforms.length < 2) {
+      const base = platforms[0] || makePlatform(0, 0);
+      if (platforms.length === 0) platforms.push(base);
+      const dir = state.dir || { x: 1, y: 0 };
+      const dist = 220 + Math.random() * 120;
+      platforms.push(makePlatform(base.x + dir.x * dist, base.y + dir.y * dist));
+    }
+
+    // 生成后续平台：用局部方向，避免污染“下一跳方向”的 state.dir
+    let genDir = { ...state.dir };
+    while (platforms.length < 6) {
+      const last = platforms[platforms.length - 1];
+      genDir = pickNextDirection(genDir);
+      const dist = 200 + Math.random() * 220;
+      platforms.push(makePlatform(last.x + genDir.x * dist, last.y + genDir.y * dist));
+    }
+  }
+
+  function focusBetween() {
+    const a = platforms[0];
+    const b = platforms[1];
+    if (!a || !b) return;
+    state.camera.tx = (a.x + b.x) / 2;
+    state.camera.ty = (a.y + b.y) / 2;
+  }
+
+  function resetGame() {
+    state.score = 0;
+    state.phase = Phase.READY;
+    state.landingLock = false;
+    hardStopInput();
+
+    // rebuild platforms
+    platforms.length = 0;
+    platforms.push(makePlatform(0, 0));
+    state.dir = Math.random() < 0.5 ? { x: 1, y: 0 } : { x: 0, y: 1 };
+    const dist = 220 + Math.random() * 120;
+    platforms.push(makePlatform(platforms[0].x + state.dir.x * dist, platforms[0].y + state.dir.y * dist));
+    ensurePlatforms();
+
+    // reset player on current
+    player.x = platforms[0].x - 10;
+    player.y = platforms[0].y - 10;
+    player.z = 0;
+    player.vx = player.vy = player.vz = 0;
+    player.squash = 0;
+    player.tilt = 0;
+
+    state.camera.fx = state.camera.tx = (platforms[0].x + platforms[1].x) / 2;
+    state.camera.fy = state.camera.ty = (platforms[0].y + platforms[1].y) / 2;
+
+    updateHUD();
+    toast('开始！');
+  }
+
+  // ---------- Input (stable pointer capture) ----------
+  function canStartCharge() {
+    return state.phase === Phase.READY;
+  }
+
+  canvas.addEventListener(
+    'pointerdown',
+    (e) => {
+      e.preventDefault();
+
+      if (state.phase === Phase.GAMEOVER) {
+        resetGame();
+        return;
+      }
+      if (!canStartCharge()) return;
+
+      canvas.setPointerCapture?.(e.pointerId);
+      state.input.active = true;
+      state.input.pointerId = e.pointerId;
+      state.input.t0 = now();
+      state.input.power = 0;
+      state.phase = Phase.CHARGING;
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener(
+    'pointerup',
+    (e) => {
+      e.preventDefault();
+      if (!state.input.active || state.input.pointerId !== e.pointerId) return;
+      if (state.phase !== Phase.CHARGING) {
+        hardStopInput();
+        return;
+      }
+      state.input.active = false;
+      state.input.pointerId = null;
+      doJump();
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener('pointercancel', () => {
+    hardStopInput();
+    state.landingLock = false;
+    if (state.phase === Phase.CHARGING) state.phase = Phase.READY;
+  });
+  window.addEventListener('blur', () => {
+    hardStopInput();
+    state.landingLock = false;
+    if (state.phase === Phase.CHARGING) state.phase = Phase.READY;
+  });
+
+  btnRestart.addEventListener('click', () => resetGame());
+
+  // ---------- Jump / Landing ----------
+  function doJump() {
+    ensurePlatforms();
+    const a = platforms[0];
+    const b = platforms[1];
+    if (!a || !b) return;
+
+    if (!state.input.t0) {
+      state.phase = Phase.READY;
+      return;
+    }
+
+    // 新一次跳跃开始：解除落地锁
+    state.landingLock = false;
+
+    const t = clamp(now() - state.input.t0, 0, phys.chargeMaxMs);
+    const p = t / phys.chargeMaxMs;
+    // curve: more sensitive early
+    const curve = 1 - Math.pow(1 - p, 2.2);
+    const v = lerp(phys.vMin, phys.vMax, curve) * tuning.power;
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+
+    player.vx = ux * v;
+    player.vy = uy * v;
+    player.vz = phys.jumpZVel;
+    player.tilt = 0.18 * (Math.random() < 0.5 ? -1 : 1);
+
+    state.phase = Phase.JUMPING;
+  }
+
+  function insideAABB(px, py, plat, expand = 1) {
+    const halfW = (plat.w / 2) * expand;
+    const halfD = (plat.d / 2) * expand;
+    return Math.abs(px - plat.x) <= halfW && Math.abs(py - plat.y) <= halfD;
+  }
+
+  function landingResolve() {
+    if (state.landingLock) return;
+    state.landingLock = true;
+
+    const curr = platforms[0];
+    const target = platforms[1];
+    if (!curr || !target) {
+      state.phase = Phase.GAMEOVER;
+      toast('数据错误：重来');
+      return;
+    }
+
+    // strictness: larger forgive => stricter; map to expand factor
+    const expand = 1 / clamp(tuning.forgive, 0.7, 1.15);
+
+    const onTarget = insideAABB(player.x, player.y, target, expand);
+    const onCurr = insideAABB(player.x, player.y, curr, expand);
+
+    if (onTarget) {
+      // edge slip: if outside inner core, treat as fail sometimes (original-like)
+      const innerExpand = expand * (1 - phys.edgeSlipBand);
+      const inCore = insideAABB(player.x, player.y, target, innerExpand);
+      if (!inCore) {
+        state.phase = Phase.GAMEOVER;
+        toast('踩边缘滑落');
+        return;
+      }
+
+      const dx = player.x - target.x;
+      const dy = player.y - target.y;
+      const perfectR = Math.min(target.w, target.d) * 0.12;
+      const distC = Math.hypot(dx, dy);
+      player.lastPerfect = distC <= perfectR;
+
+      state.score += player.lastPerfect ? 2 : 1;
+      if (state.score > state.best) {
+        state.best = state.score;
+        saveBest();
+      }
+      updateHUD();
+      if (player.lastPerfect) toast('Perfect +2');
+
+      // snap & advance
+      player.x = lerp(player.x, target.x - 10, 0.65);
+      player.y = lerp(player.y, target.y - 10, 0.65);
+      player.z = 0;
+      player.vx = player.vy = player.vz = 0;
+
+      // 成功前进：下一次目标方向切换一次
+      state.dir = pickNextDirection(state.dir);
+
+      platforms.shift();
+      ensurePlatforms();
+      focusBetween();
+
+      state.phase = Phase.READY;
+      return;
+    }
+
+    if (onCurr) {
+      // landed back: no score
+      player.z = 0;
+      player.vx = player.vy = player.vz = 0;
+      focusBetween();
+      state.phase = Phase.READY;
+      toast('差一点…');
+      // 允许下一次跳跃正常落地结算
+      state.landingLock = false;
+      return;
+    }
+
+    state.phase = Phase.GAMEOVER;
+    toast('失败：点击重来');
+  }
+
+  // ---------- Resize ----------
+  // ---------- Performance helpers ----------
+  const perf = {
+    dprCap: 2.0,
+    bgDirty: true,
+    bgCanvas: document.createElement('canvas'),
+    bgCtx: null,
+    // adaptive quality
+    emaDt: 1 / 60,
+  };
+  perf.bgCtx = perf.bgCanvas.getContext('2d');
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    // cap DPR a bit lower for performance; will adapt down on slow devices.
+    DPR = Math.max(1, Math.min(perf.dprCap, window.devicePixelRatio || 1));
+    canvas.width = Math.floor(rect.width * DPR);
+    canvas.height = Math.floor((Math.min(680, rect.width * 0.72) + 40) * DPR);
+    canvas.style.height = canvas.height / DPR + 'px';
+
+    const base = Math.min(canvas.width, canvas.height);
+    view.scale = (base / 520) * tuning.zoom;
+
+    // background cache resize
+    perf.bgCanvas.width = canvas.width;
+    perf.bgCanvas.height = canvas.height;
+    perf.bgDirty = true;
+
+    // Initial center; the game loop will continuously update cx/cy based on camera focus.
+    view.cx = canvas.width * 0.5;
+    view.cy = canvas.height * 0.46;
+  }
+  window.addEventListener('resize', resize);
+
+  // ---------- Drawing ----------
+  function shade(hex, amt) {
+    const h = hex.replace('#', '');
+    const num = parseInt(h, 16);
+    let r = (num >> 16) & 255;
+    let g = (num >> 8) & 255;
+    let b = num & 255;
+    r = clamp(r + amt, 0, 255);
+    g = clamp(g + amt, 0, 255);
+    b = clamp(b + amt, 0, 255);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function roundRect(x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function renderBackgroundCache() {
+    const bctx = perf.bgCtx;
+    bctx.clearRect(0, 0, perf.bgCanvas.width, perf.bgCanvas.height);
+    const g = bctx.createLinearGradient(0, 0, 0, perf.bgCanvas.height);
+    g.addColorStop(0, '#f8fafc');
+    g.addColorStop(1, '#e5e7eb');
+    bctx.fillStyle = g;
+    bctx.fillRect(0, 0, perf.bgCanvas.width, perf.bgCanvas.height);
+
+    bctx.save();
+    bctx.globalAlpha = 0.35;
+    bctx.fillStyle = '#c7d2fe';
+    for (let i = 0; i < 18; i++) {
+      const x = (i * 137) % perf.bgCanvas.width;
+      const y = (i * 91) % perf.bgCanvas.height;
+      bctx.beginPath();
+      bctx.arc(x, y, 2.2 * DPR, 0, Math.PI * 2);
+      bctx.fill();
+    }
+    bctx.restore();
+    perf.bgDirty = false;
+  }
+
+  function drawBackground() {
+    if (perf.bgDirty) renderBackgroundCache();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(perf.bgCanvas, 0, 0);
+  }
+
+  function drawPlatform(p) {
+    const hw = p.w / 2,
+      hd = p.d / 2;
+    const topZ = p.top;
+
+    const A = project(p.x - hw, p.y - hd, topZ);
+    const B = project(p.x + hw, p.y - hd, topZ);
+    const C = project(p.x + hw, p.y + hd, topZ);
+    const D = project(p.x - hw, p.y + hd, topZ);
+
+    const Ab = project(p.x - hw, p.y - hd, 0);
+    const Bb = project(p.x + hw, p.y - hd, 0);
+    const Cb = project(p.x + hw, p.y + hd, 0);
+    const Db = project(p.x - hw, p.y + hd, 0);
+
+    ctx.save();
+
+    // left
+    ctx.beginPath();
+    ctx.moveTo(D.x, D.y);
+    ctx.lineTo(A.x, A.y);
+    ctx.lineTo(Ab.x, Ab.y);
+    ctx.lineTo(Db.x, Db.y);
+    ctx.closePath();
+    ctx.fillStyle = shade(p.color, -10);
+    ctx.fill();
+
+    // right
+    ctx.beginPath();
+    ctx.moveTo(B.x, B.y);
+    ctx.lineTo(C.x, C.y);
+    ctx.lineTo(Cb.x, Cb.y);
+    ctx.lineTo(Bb.x, Bb.y);
+    ctx.closePath();
+    ctx.fillStyle = shade(p.color, -20);
+    ctx.fill();
+
+    // top
+    ctx.beginPath();
+    ctx.moveTo(A.x, A.y);
+    ctx.lineTo(B.x, B.y);
+    ctx.lineTo(C.x, C.y);
+    ctx.lineTo(D.x, D.y);
+    ctx.closePath();
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,.55)';
+    ctx.lineWidth = 2 * DPR;
+    ctx.stroke();
+
+    if (p.hasCenter) {
+      const ctr = project(p.x, p.y, topZ + 0.5);
+      ctx.fillStyle = 'rgba(15,23,42,.16)';
+      ctx.beginPath();
+      ctx.arc(ctr.x, ctr.y, 6 * DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawPlayer() {
+    const base = project(player.x, player.y, 0);
+    const squash = player.squash;
+
+    // shadow
+    ctx.save();
+    ctx.globalAlpha = 0.26;
+    ctx.fillStyle = colors.shadow;
+    ctx.beginPath();
+    ctx.ellipse(
+      base.x,
+      base.y + 18 * view.scale,
+      (22 + 8 * squash) * view.scale,
+      (10 + 6 * squash) * view.scale,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.restore();
+
+    const pos = project(player.x, player.y, player.z + 30);
+    const bodyW = (26 + 14 * squash) * view.scale;
+    const bodyH = (42 - 18 * squash) * view.scale;
+
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(player.tilt);
+
+    roundRect(-bodyW / 2, -bodyH, bodyW, bodyH, 10 * view.scale);
+    ctx.fillStyle = colors.player;
+    ctx.fill();
+
+    roundRect(-bodyW / 2, -bodyH - 12 * view.scale, bodyW, 16 * view.scale, 10 * view.scale);
+    ctx.fillStyle = colors.playerTop;
+    ctx.fill();
+
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.arc(6 * view.scale, -bodyH + 10 * view.scale, 2.2 * view.scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawChargeUI() {
+    if (state.phase !== Phase.CHARGING) return;
+    const p = state.input.power;
+    const a = platforms[0];
+    const b = platforms[1];
+    if (!a || !b) return;
+
+    const pa = project(a.x, a.y, a.top + 2);
+    const pb = project(b.x, b.y, b.top + 2);
+
+    // ---- Predicted landing point (pre-landing marker) ----
+    // Estimate horizontal speed from the same curve used in doJump(), then
+    // compute flight time until z returns to 0 (ignoring platform height, matches current landing check).
+    const curve = 1 - Math.pow(1 - clamp(p, 0, 1), 2.2);
+    const v = lerp(phys.vMin, phys.vMax, curve) * tuning.power;
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+
+    // time to land back on ground (z=0): t = 2*vz/g
+    const tFlight = (2 * phys.jumpZVel) / phys.g;
+    const predX = player.x + ux * v * tFlight;
+    const predY = player.y + uy * v * tFlight;
+
+    const expand = 1 / clamp(tuning.forgive, 0.7, 1.15);
+    const willOnTarget = insideAABB(predX, predY, b, expand);
+    const willOnCurr = insideAABB(predX, predY, a, expand);
+
+    // edge slip prediction: show warning color if only on edge (outside core)
+    const innerExpand = expand * (1 - phys.edgeSlipBand);
+    const willInCore = insideAABB(predX, predY, b, innerExpand);
+
+    const predPt = project(predX, predY, (willOnTarget ? b.top : a.top) + 2);
+
+    ctx.save();
+
+    // Aim line
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = 'rgba(99,102,241,.7)';
+    ctx.lineWidth = (3 + 2 * p) * DPR;
+    ctx.setLineDash([10 * DPR, 10 * DPR]);
+    ctx.beginPath();
+    ctx.moveTo(pa.x, pa.y);
+    ctx.lineTo(pb.x, pb.y);
+    ctx.stroke();
+
+    // Predicted marker
+    ctx.setLineDash([]);
+    const good = willOnTarget && willInCore;
+    const edge = willOnTarget && !willInCore;
+    const bad = !willOnTarget;
+
+    const ringR = (12 + 8 * p) * view.scale;
+    ctx.lineWidth = 2.5 * DPR;
+    ctx.globalAlpha = 0.95;
+    ctx.strokeStyle = good ? 'rgba(16,185,129,.95)' : edge ? 'rgba(245,158,11,.95)' : 'rgba(239,68,68,.95)';
+    ctx.fillStyle = good ? 'rgba(16,185,129,.18)' : edge ? 'rgba(245,158,11,.18)' : 'rgba(239,68,68,.15)';
+
+    ctx.beginPath();
+    ctx.arc(predPt.x, predPt.y, ringR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // tiny crosshair
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = good ? 'rgba(16,185,129,.95)' : edge ? 'rgba(245,158,11,.95)' : 'rgba(239,68,68,.95)';
+    ctx.beginPath();
+    ctx.moveTo(predPt.x - ringR * 0.55, predPt.y);
+    ctx.lineTo(predPt.x + ringR * 0.55, predPt.y);
+    ctx.moveTo(predPt.x, predPt.y - ringR * 0.55);
+    ctx.lineTo(predPt.x, predPt.y + ringR * 0.55);
+    ctx.stroke();
+
+    // Charge bar
+    const w = canvas.width * 0.36;
+    const h = 10 * DPR;
+    const x = canvas.width * 0.5 - w / 2;
+    const y = canvas.height - 22 * DPR;
+
+    ctx.globalAlpha = 0.9;
+    roundRect(x, y, w, h, 999);
+    ctx.fillStyle = 'rgba(15,23,42,.12)';
+    ctx.fill();
+    roundRect(x, y, w * p, h, 999);
+    ctx.fillStyle = 'rgba(99,102,241,.9)';
+    ctx.fill();
+
+    // Small hint text (optional, subtle)
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = 'rgba(15,23,42,.72)';
+    ctx.font = `${11 * DPR}px ui-sans-serif, system-ui, -apple-system, Segoe UI`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    const msg = good ? '可落稳' : edge ? '边缘危险' : willOnCurr ? '会落回原块' : '会落空';
+    ctx.fillText(msg, predPt.x, predPt.y - ringR * 0.75);
+
+    ctx.restore();
+  }
+
+  // ---------- Loop ----------
+  let lastT = now();
+  // reuse objects to avoid per-frame allocations
+  const drawOrder = [];
+  function tick() {
+    const t = now();
+    const dt = clamp((t - lastT) / 1000, 0, 0.05);
+    lastT = t;
+
+    // adaptive quality: if consistently slow, lower DPR cap and redraw background
+    perf.emaDt = perf.emaDt * 0.92 + dt * 0.08;
+    if (perf.emaDt > 1 / 42 && perf.dprCap > 1.25) {
+      perf.dprCap = 1.5;
+      resize();
+    } else if (perf.emaDt > 1 / 32 && perf.dprCap > 1.0) {
+      perf.dprCap = 1.0;
+      resize();
+    }
+
+    // charging
+    if (state.phase === Phase.CHARGING) {
+      const ms = clamp(t - state.input.t0, 0, phys.chargeMaxMs);
+      const p = ms / phys.chargeMaxMs;
+      state.input.power = p;
+      player.squash = lerp(player.squash, p, 0.22);
+    } else {
+      player.squash = lerp(player.squash, 0, 0.16);
+    }
+
+    // camera
+    focusBetween();
+    state.camera.fx = lerp(state.camera.fx, state.camera.tx, 0.08);
+    state.camera.fy = lerp(state.camera.fy, state.camera.ty, 0.08);
+
+    // Keep scale stable (only depends on canvas size + tuning)
+    const base = Math.min(canvas.width, canvas.height);
+    view.scale = (base / 520) * tuning.zoom;
+
+    // Avoid feedback loop jitter: compute focus projection WITHOUT cx/cy, then set cx/cy once.
+    // project0 returns screen coords assuming origin at (0,0) before adding cx/cy.
+    const project0 = (wx, wy, wz = 0) => {
+      const x = (wx - wy) * view.isoX;
+      const y = (wx + wy) * view.isoY - wz;
+      return { x: x * view.scale, y: y * view.scale };
+    };
+    const f0 = project0(state.camera.fx, state.camera.fy, 0);
+    view.cx = canvas.width * 0.5 - f0.x;
+    view.cy = canvas.height * 0.46 - f0.y;
+
+    // physics
+    if (state.phase === Phase.JUMPING) {
+      player.x += player.vx * dt;
+      player.y += player.vy * dt;
+      player.z += player.vz * dt;
+      player.vz -= phys.g * dt;
+      player.tilt = lerp(player.tilt, 0, 0.08);
+
+      if (player.z <= 0 && player.vz < 0) {
+        player.z = 0;
+        landingResolve();
+      }
+    }
+
+    // draw
+    drawBackground();
+
+    // depth sort (avoid allocations)
+    drawOrder.length = 0;
+    const n = Math.min(6, platforms.length);
+    for (let i = 0; i < n; i++) {
+      const p = platforms[i];
+      drawOrder.push(p);
+    }
+    drawOrder.sort((p1, p2) => (p1.x + p1.y) - (p2.x + p2.y));
+    for (let i = 0; i < drawOrder.length; i++) drawPlatform(drawOrder[i]);
+
+    drawPlayer();
+    drawChargeUI();
+
+    if (state.phase === Phase.GAMEOVER) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(15,23,42,.38)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,.92)';
+      const w = canvas.width * 0.62;
+      const h = canvas.height * 0.24;
+      const x = canvas.width * 0.5 - w / 2;
+      const y = canvas.height * 0.5 - h / 2;
+      roundRect(x, y, w, h, 18 * DPR);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(15,23,42,.92)';
+      ctx.font = `${18 * DPR}px ui-sans-serif, system-ui, -apple-system, Segoe UI`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('游戏结束', canvas.width * 0.5, y + h * 0.34);
+      ctx.font = `${12 * DPR}px ui-sans-serif, system-ui, -apple-system, Segoe UI`;
+      ctx.fillStyle = 'rgba(15,23,42,.75)';
+      ctx.fillText('点击画面或“重来”重新开始', canvas.width * 0.5, y + h * 0.64);
+      ctx.restore();
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  // ---------- UI tuning ----------
+  function bindTuning() {
+    powerEl.addEventListener('input', () => {
+      tuning.power = Number(powerEl.value);
+      vPower.textContent = Number(tuning.power).toFixed(2);
+      saveTuning();
+    });
+    forgiveEl.addEventListener('input', () => {
+      tuning.forgive = Number(forgiveEl.value);
+      vForgive.textContent = Number(tuning.forgive).toFixed(2);
+      saveTuning();
+    });
+    zoomEl.addEventListener('input', () => {
+      tuning.zoom = Number(zoomEl.value);
+      vZoom.textContent = Number(tuning.zoom).toFixed(2);
+      saveTuning();
+      resize();
+    });
+    btnResetTuning.addEventListener('click', () => {
+      tuning = { ...tuningDefault };
+      applyTuningUI();
+      saveTuning();
+      resize();
+      toast('已恢复默认');
+    });
+  }
+
+  // ---------- Boot ----------
+  loadBest();
+  loadTuning();
+  applyTuningUI();
+  bindTuning();
+  resize();
+  resetGame();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

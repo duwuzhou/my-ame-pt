@@ -21,6 +21,10 @@ const GAMES: Record<string, { name: string; htmlFile: string }> = {
     name: '见缝插针',
     htmlFile: '/html/jfcz.html',
   },
+  'tyt': {
+    name: '跳一跳',
+    htmlFile: '/html/tyt.html',
+  },
 };
 
 export default function GameScreen() {

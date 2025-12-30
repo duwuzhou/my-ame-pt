@@ -11,24 +11,35 @@ const GAMES = [
     name: '2048',
     description: '合并数字，挑战2048',
     icon: '🎮',
+    color: '#f59e0b',
   },
   {
     id: 'tiaoyue',
     name: '跳跃前进',
     description: '躲避障碍，跑得更远',
     icon: '🦘',
+    color: '#10b981',
   },
   {
     id: 'tydxn',
     name: '跳跃的小鸟',
     description: '穿越管道，挑战高分',
     icon: '🐦',
+    color: '#3b82f6',
   },
   {
     id: 'jfcz',
     name: '见缝插针',
     description: '精准插入，考验反应',
     icon: '📍',
+    color: '#ef4444',
+  },
+  {
+    id: 'tyt',
+    name: '跳一跳',
+    description: '按住蓄力，精准起跳',
+    icon: '🎯',
+    color: '#8b5cf6',
   },
 ];
 
@@ -59,7 +70,7 @@ export default function HomeScreen() {
           {GAMES.map((game) => (
             <TouchableOpacity
               key={game.id}
-              style={[styles.gameCard, { width: cardSize, height: cardSize }]}
+              style={[styles.gameCard, { width: cardSize, height: cardSize, backgroundColor: game.color }]}
               onPress={() => handleGamePress(game.id)}
               activeOpacity={0.7}
             >
@@ -114,7 +125,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   gameCard: {
-    backgroundColor: '#0ea5e9',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',

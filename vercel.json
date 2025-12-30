@@ -1,7 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/((?!html/).*)",
+      "source": "/games/:id",
+      "destination": "/games/[id].html"
+    },
+    {
+      "source": "/((?!html/|_expo/|assets/).*)",
       "destination": "/index.html"
     }
   ]

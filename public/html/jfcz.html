@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>见缝插针 (Pin Game)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        body {
+            touch-action: none; /* Prevent scrolling/zooming */
+            -webkit-tap-highlight-color: transparent;
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #f3f4f6;
+        }
+        .pin-wrapper {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            /* transform set by JS */
+            pointer-events: none;
+            will-change: transform;
+        }
+        .pin-line {
+            position: absolute;
+            top: 70px; /* target radius */
+            left: -1px;
+            width: 2px;
+            height: 60px;
+            background-color: black;
+        }
+        .pin-head {
+            position: absolute;
+            top: 130px; /* 70 + 60 */
+            left: -7px;
+            width: 14px;
+            height: 14px;
+            background-color: black;
+            border-radius: 50%;
+        }
+
+        
+        /* Flying pin (shoot animation) */
+        .flying-pin {
+            position: absolute;
+            width: 2px;
+            height: 74px; /* 60 line + 14 head */
+            pointer-events: none;
+            z-index: 45; /* above aim-line and most UI */
+            will-change: transform;
+        }
+        .flying-pin::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 2px;
+            height: 60px;
+            background: #000;
+            border-radius: 1px;
+        }
+        .flying-pin::after {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 60px;
+            width: 14px;
+            height: 14px;
+            background: #000;
+            border-radius: 9999px;
+        }
+
+        /* Shake Animation for Game Over */
+        .shake {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen w-screen flex flex-col items-center justify-center overflow-hidden select-none text-gray-900">
+
+    <!-- Score & Level Info -->
+    <div class="absolute top-12 flex flex-col items-center z-10 pointer-events-none">
+        <div class="text-6xl font-bold tracking-tighter" id="score">0</div>
+        <div class="text-lg text-gray-500 mt-1 uppercase tracking-widest" id="level-display">第 1 关</div>
+    </div>
+
+    <!-- Main Game Area -->
+    <div class="relative w-full max-w-md h-full flex flex-col items-center justify-center">
+        
+        <!-- Rotating Target Container (Wrapper for shake + positioning) -->
+        <div id="target-container" class="absolute top-[28%] w-[140px] h-[140px]">
+            <!-- The Rotating Ball -->
+            <div id="target" class="w-full h-full bg-black rounded-full shadow-2xl relative z-20 will-change-transform"></div>
+            
+            <!-- Static Text Overlay -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+                <span class="text-white text-3xl font-bold" id="pins-left">0</span>
+            </div>
+        </div>
+
+        <!-- Shooter (Static Visual) -->
+        <div id="shooter" class="absolute bottom-[15%] flex flex-col items-center transition-transform duration-75 ease-out z-20 pointer-events-none">
+             <div class="w-[2px] h-[60px] bg-black"></div>
+             <div class="w-[14px] h-[14px] bg-black rounded-full -mt-0"></div>
+        </div>
+
+        <!-- 辅助瞄准虚线（用 JS 动态定位，避免不显示） -->
+        <div id="aim-line" class="absolute left-1/2 -translate-x-1/2 w-[4px] z-30 pointer-events-none" style="display:none;">
+            <div class="w-full h-full" style="background: repeating-linear-gradient(to bottom, rgba(239,68,68,0.95) 0, rgba(239,68,68,0.95) 10px, rgba(239,68,68,0) 10px, rgba(239,68,68,0) 18px);"></div>
+        </div>
+
+        <!-- Click Capture Layer -->
+        <div id="click-layer" class="absolute inset-0 z-40 cursor-pointer"></div>
+
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm transition-opacity duration-300 opacity-0">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl text-center transform scale-90 transition-transform duration-300 w-[80%] max-w-xs" id="modal-content">
+            <h2 class="text-3xl font-black text-gray-900 mb-2">挑战失败</h2>
+            <div class="w-full h-px bg-gray-200 my-4"></div>
+            <p class="text-gray-500 mb-6 text-lg">得分: <span id="final-score" class="text-black font-bold">0</span></p>
+            <button id="restart-btn" class="w-full bg-black text-white py-4 rounded-xl font-bold text-lg hover:bg-gray-800 active:scale-95 transition-all shadow-lg">
+                再试一次
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const target = document.getElementById('target');
+        const targetContainer = document.getElementById('target-container');
+        const shooter = document.getElementById('shooter');
+        const scoreDisplay = document.getElementById('score');
+        const levelDisplay = document.getElementById('level-display');
+        const pinsLeftDisplay = document.getElementById('pins-left');
+        const modal = document.getElementById('modal');
+        const modalContent = document.getElementById('modal-content');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const restartBtn = document.getElementById('restart-btn');
+        const clickLayer = document.getElementById('click-layer');
+        const aimLine = document.getElementById('aim-line');
+
+        // Game State
+        let rotation = 0;
+        let speed = 1.5;
+        let isRunning = false;
+        let animationId;
+        
+        let level = 1;
+        let score = 0;
+        let pinsQueue = 0;
+        let existingPins = []; // Stores angles of pins on the wheel
+        let isShooting = false; // prevent spamming during shoot animation
+
+        // Level Config (Easier progression)
+        // 关卡配置：更友好的难度曲线（速度增长更小，针数也更保守）
+        const LEVELS = [
+            { speed: 0.75, count: 5, init: [] },
+            { speed: 0.85, count: 6, init: [0, 180] },
+            { speed: 0.95, count: 7, init: [0, 120, 240] },
+            { speed: 1.05, count: 8, init: [0, 90, 180, 270] },
+            { speed: 1.15, count: 9, init: [0, 72, 144, 216, 288] }
+        ];
+
+        // Initialization
+        function init() {
+            restartBtn.addEventListener('click', restartGame);
+            clickLayer.addEventListener('click', handleShoot);
+
+            // 窗口尺寸变化时重算瞄准线
+            window.addEventListener('resize', () => {
+                // 仅在运行时更新也可以，但这里不限制
+                updateAimLine();
+            });
+            
+            // Desktop Spacebar support
+            document.addEventListener('keydown', (e) => {
+                if(e.code === 'Space') {
+                    e.preventDefault(); 
+                    handleShoot();
+                }
+            });
+            
+            startGame();
+        }
+
+        function startGame() {
+            level = 1;
+            score = 0;
+            scoreDisplay.textContent = score;
+            startLevel(level);
+        }
+
+        function restartGame() {
+            hideModal();
+            setTimeout(startGame, 300);
+        }
+
+        function startLevel(lvl) {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            rotation = 0; 
+            target.style.transform = `rotate(0deg)`;
+            
+            // Get Config or Generate Procedural
+            let config;
+            if (lvl <= LEVELS.length) {
+                config = LEVELS[lvl-1];
+            } else {
+                // Infinite progression (Much gentler curve)
+                // 无尽模式：难度增长更慢
+                config = {
+                    // 无尽模式：非常缓慢地提升速度和针数
+                    speed: Math.min(2.2, 1.1 + ((lvl - 5) * 0.05)),
+                    count: Math.min(14, 8 + Math.floor((lvl - 5) * 0.6)),
+                    init: []
+                };
+                const initCount = Math.min(6, 2 + Math.floor((lvl - 5) / 4));
+                for(let i=0; i<initCount; i++) config.init.push(i * (360/initCount));
+            }
+
+            speed = config.speed;
+            pinsQueue = config.count;
+            existingPins = [];
+            
+            // UI Update
+            levelDisplay.textContent = `第 ${lvl} 关`;
+            pinsLeftDisplay.textContent = pinsQueue;
+            
+            // Clear Target Pins
+            const oldPins = target.querySelectorAll('.pin-wrapper');
+            oldPins.forEach(p => p.remove());
+
+            // Render Initial Pins
+            config.init.forEach(angle => {
+                addPin(angle);
+            });
+
+            // 立即更新一次瞄准线（避免刚进关卡时不显示）
+            updateAimLine();
+
+            // Start Loop
+            isRunning = true;
+            loop();
+        }
+
+        function updateAimLine() {
+            if (!aimLine) return;
+
+            // 用实际 DOM 位置计算，确保任何屏幕尺寸/布局下都可见
+            const targetRect = target.getBoundingClientRect();
+            const shooterRect = shooter.getBoundingClientRect();
+
+            // 球体底部（留一点点空隙，避免被球体盖住）
+            const fromY = targetRect.bottom + 6;
+            // 发射器顶部（留一点点空隙）
+            const toY = shooterRect.top - 6;
+
+            const h = Math.max(0, toY - fromY);
+            if (h < 6) {
+                aimLine.style.display = 'none';
+                return;
+            }
+
+            // 把视口坐标转换为父容器（relative 的主游戏区域）内的坐标
+            const parentRect = aimLine.parentElement.getBoundingClientRect();
+            const top = fromY - parentRect.top;
+
+            aimLine.style.display = 'block';
+            aimLine.style.top = `${top}px`;
+            aimLine.style.height = `${h}px`;
+        }
+
+        function loop() {
+            if (!isRunning) return;
+            rotation += speed;
+            target.style.transform = `rotate(${rotation}deg)`;
+            // 瞄准线位置不随旋转变化，没必要每帧更新（减少“在动”的观感 + 省性能）
+            animationId = requestAnimationFrame(loop);
+        }
+
+        function handleShoot(e) {
+            if (!isRunning) return;
+            if (isShooting) return;
+            if (e) e.preventDefault();
+
+            isShooting = true;
+
+            // 1) Create a flying pin at the shooter position
+            const flyer = document.createElement('div');
+            flyer.className = 'flying-pin';
+            
+            const gameArea = clickLayer.parentElement; // the relative main game area
+            gameArea.appendChild(flyer);
+
+            // Place it exactly over the shooter (centered)
+            const parentRect = gameArea.getBoundingClientRect();
+            const shooterRect = shooter.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+
+            const startX = (shooterRect.left + shooterRect.right) / 2 - parentRect.left;
+            const startY = shooterRect.top - parentRect.top; // top of shooter
+            flyer.style.left = `${startX}px`;
+            flyer.style.top = `${startY}px`;
+            flyer.style.transform = 'translateX(-50%) translateY(0)';
+
+            // 2) Compute travel distance to just below the ball
+            // Aim to the bottom edge of the ball with a tiny gap
+            const endY = (targetRect.bottom + 2) - parentRect.top; // where flyer's top should arrive
+            const deltaY = Math.min(0, endY - startY);
+
+            // 3) Animate
+            const duration = 140; // ms
+            flyer.offsetHeight; // reflow
+            flyer.style.transition = `transform ${duration}ms cubic-bezier(.2,.8,.2,1)`;
+            flyer.style.transform = `translateX(-50%) translateY(${deltaY}px)`;
+
+            // small recoil for the static shooter
+            shooter.style.transform = 'translateY(15px) scale(0.9)';
+            setTimeout(() => shooter.style.transform = 'translateY(0) scale(1)', 80);
+
+            // 4) At impact time, check collision using the CURRENT rotation (more fair)
+            setTimeout(() => {
+                flyer.remove();
+
+                if (!isRunning) {
+                    isShooting = false;
+                    return;
+                }
+
+                const currentR = rotation;
+                const impactAngle = (360 - (currentR % 360)) % 360;
+
+                if (checkCollision(impactAngle)) {
+                    isShooting = false;
+                    gameOver();
+                    return;
+                }
+
+                // Success: attach pin to target
+                addPin(impactAngle);
+                score++;
+                scoreDisplay.textContent = score;
+
+                pinsQueue--;
+                pinsLeftDisplay.textContent = pinsQueue;
+
+                isShooting = false;
+
+                if (pinsQueue <= 0) {
+                    levelComplete();
+                }
+            }, duration);
+        }
+
+        function addPin(angle) {
+            existingPins.push(angle);
+            
+            const el = document.createElement('div');
+            el.className = 'pin-wrapper';
+            el.style.transform = `rotate(${angle}deg)`;
+            
+            const line = document.createElement('div');
+            line.className = 'pin-line';
+            const head = document.createElement('div');
+            head.className = 'pin-head';
+            
+            el.appendChild(line);
+            el.appendChild(head);
+            target.appendChild(el);
+        }
+
+        function checkCollision(angle) {
+            // 容错：球体变大后仍然希望更好过一些，适当放宽判定
+            const threshold = 9;
+            for (let a of existingPins) {
+                let diff = Math.abs(a - angle);
+                if (diff > 180) diff = 360 - diff;
+                if (diff < threshold) return true;
+            }
+            return false;
+        }
+
+        function levelComplete() {
+            level++;
+            isShooting = false;
+            // Visual Flash
+            document.body.style.backgroundColor = '#86efac'; // green-300
+            setTimeout(() => {
+                document.body.style.backgroundColor = '';
+                startLevel(level);
+            }, 200);
+        }
+
+        function gameOver() {
+            isRunning = false;
+            isShooting = false;
+            cancelAnimationFrame(animationId);
+            
+            // Trigger Shake
+            targetContainer.classList.add('shake');
+            document.body.style.backgroundColor = '#fca5a5'; // red-300
+            
+            setTimeout(() => {
+                targetContainer.classList.remove('shake');
+                document.body.style.backgroundColor = '';
+                
+                finalScoreDisplay.textContent = score;
+                showModal();
+            }, 500);
+        }
+
+        function showModal() {
+            modal.classList.remove('hidden');
+            void modal.offsetWidth; // force reflow
+            modal.classList.remove('opacity-0');
+            modalContent.classList.remove('scale-90');
+            modalContent.classList.add('scale-100');
+        }
+
+        function hideModal() {
+            modal.classList.add('opacity-0');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-90');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

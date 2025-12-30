@@ -24,6 +24,12 @@ const GAMES = [
     description: '穿越管道，挑战高分',
     icon: '🐦',
   },
+  {
+    id: 'jfcz',
+    name: '见缝插针',
+    description: '精准插入，考验反应',
+    icon: '📍',
+  },
 ];
 
 export default function HomeScreen() {

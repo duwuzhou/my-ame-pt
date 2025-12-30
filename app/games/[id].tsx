@@ -17,6 +17,10 @@ const GAMES: Record<string, { name: string; htmlFile: string }> = {
     name: '跳跃的小鸟',
     htmlFile: '/html/tydxn.html',
   },
+  'jfcz': {
+    name: '见缝插针',
+    htmlFile: '/html/jfcz.html',
+  },
 };
 
 export default function GameScreen() {

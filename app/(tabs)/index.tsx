@@ -45,7 +45,7 @@ export default function HomeScreen() {
     );
   }, [games, searchText]);
 
-  // 计算卡片布局：使用容器实际宽度
+  // 计算卡片布局：使用容器实际宽度，优化移动端适配
   const getCardLayout = (index: number) => {
     // 使用容器的实际最大宽度，而不是窗口宽度
     const containerWidth = Math.min(width, 1200);
@@ -68,14 +68,19 @@ export default function HomeScreen() {
         return { width: baseWidth * 2 + gap, height: baseWidth * 0.8 };
       }
       return { width: baseWidth, height: baseWidth };
-    } else {
-      // 移动端：2列，第一个占满宽
+    } else if (containerWidth >= 480) {
+      // 中等移动端：2列，第一个占满宽
       const availableWidth = containerWidth - padding;
       const baseWidth = (availableWidth - gap) / 2;
       if (index === 0) {
-        return { width: baseWidth * 2 + gap, height: baseWidth * 0.9 };
+        return { width: availableWidth, height: baseWidth * 0.9 };
       }
       return { width: baseWidth, height: baseWidth };
+    } else {
+      // 小屏移动端：2列，所有卡片统一大小
+      const availableWidth = containerWidth - padding;
+      const baseWidth = (availableWidth - gap) / 2;
+      return { width: baseWidth, height: baseWidth * 1.1 };
     }
   };
 
@@ -146,7 +151,8 @@ export default function HomeScreen() {
               <View style={styles.gamesGrid}>
                 {filteredGames.map((game, index) => {
                   const layout = getCardLayout(index);
-                  const isLarge = index === 0 || (width >= 768 && index % 3 === 0);
+                  // 只在较大屏幕上使用大卡片布局
+                  const isLarge = width >= 480 && (index === 0 || (width >= 768 && index % 3 === 0));
 
                   return (
                     <TouchableOpacity
@@ -292,7 +298,7 @@ const styles = StyleSheet.create({
   },
   gameCard: {
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -301,64 +307,70 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
+    overflow: 'hidden',
   },
   largeCard: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   gameIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   largeGameIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     marginBottom: 0,
-    marginRight: 20,
+    marginRight: 16,
   },
   iconText: {
-    fontSize: 32,
+    fontSize: 28,
   },
   largeIconText: {
-    fontSize: 48,
+    fontSize: 40,
   },
   gameName: {
-    fontSize: 20,
+    fontSize: 18,
     marginBottom: 4,
     color: '#ffffff',
+    textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   largeGameName: {
-    fontSize: 28,
-    marginBottom: 8,
+    fontSize: 24,
+    marginBottom: 6,
+    textAlign: 'left',
   },
   gameDescription: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
     opacity: 0.95,
     color: '#ffffff',
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    lineHeight: 18,
   },
   largeGameDescription: {
-    fontSize: 16,
+    fontSize: 15,
     maxWidth: '70%',
+    textAlign: 'left',
+    lineHeight: 20,
   },
   featuredBadge: {
     position: 'absolute',

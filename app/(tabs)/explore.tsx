@@ -9,7 +9,7 @@ export default function ExploreScreen() {
   };
 
   const openEmail = () => {
-    Linking.openURL('mailto:1753242279@qq.com');
+    Linking.openURL('mailto:1503965150@qq.com');
   };
 
   return (
@@ -90,7 +90,7 @@ export default function ExploreScreen() {
                 <ThemedText style={styles.contactIcon}>📧</ThemedText>
                 <View style={styles.contactInfo}>
                   <ThemedText style={styles.contactLabel}>邮箱</ThemedText>
-                  <ThemedText style={styles.contactValue}>1753242279@qq.com</ThemedText>
+                  <ThemedText style={styles.contactValue}>1503965150@qq.com</ThemedText>
                 </View>
               </Pressable>
 
@@ -104,7 +104,7 @@ export default function ExploreScreen() {
             </View>
           </ThemedView>
 
-          <ThemedText style={styles.footer}>Made with ❤️ for everyone</ThemedText>
+          <ThemedText style={styles.footer}>Made with ❤️ by 花落</ThemedText>
           <ThemedText style={styles.copyright}>© 2024 My Game PT. All rights reserved.</ThemedText>
         </View>
       </ThemedView>

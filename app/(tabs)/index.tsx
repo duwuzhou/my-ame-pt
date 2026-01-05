@@ -85,16 +85,8 @@ export default function HomeScreen() {
         return { width: baseWidth * 2 + gap, height: baseWidth * 0.8 };
       }
       return { width: baseWidth, height: baseWidth };
-    } else if (containerWidth >= 480) {
-      // 中等移动端：2列，第一个占满宽
-      const availableWidth = containerWidth - padding;
-      const baseWidth = (availableWidth - gap) / 2;
-      if (index === 0) {
-        return { width: availableWidth, height: baseWidth * 0.9 };
-      }
-      return { width: baseWidth, height: baseWidth };
     } else {
-      // 小屏移动端：2列，所有卡片统一大小
+      // 移动端：2列，所有卡片统一大小
       const availableWidth = containerWidth - padding;
       const baseWidth = (availableWidth - gap) / 2;
       return { width: baseWidth, height: baseWidth * 1.1 };
@@ -212,8 +204,8 @@ export default function HomeScreen() {
               <View style={styles.gamesGrid}>
                 {filteredGames.map((game, index) => {
                   const layout = getCardLayout(index);
-                  // 只在较大屏幕上使用大卡片布局
-                  const isLarge = width >= 480 && (index === 0 || (width >= 768 && index % 3 === 0));
+                  // 只在平板和电脑上使用大卡片布局
+                  const isLarge = width >= 768 && (index === 0 || index % 3 === 0);
 
                   return (
                     <TouchableOpacity

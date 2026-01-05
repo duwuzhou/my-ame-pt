@@ -4,29 +4,35 @@ import { useEffect, useState, useMemo } from 'react';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { api, Game } from '@/services/api';
+import { api, Game, Tag } from '@/services/api';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const [games, setGames] = useState<Game[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
 
   useEffect(() => {
-    loadGames();
+    loadData();
   }, []);
 
-  const loadGames = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const gameList = await api.getGames();
+      const [gameList, tagList] = await Promise.all([
+        api.getGamesWithTags(),
+        api.getTags()
+      ]);
       setGames(gameList);
+      setTags(tagList);
     } catch (err) {
-      console.error('Failed to load games:', err);
-      setError('加载游戏列表失败，请稍后重试');
+      console.error('Failed to load data:', err);
+      setError('加载数据失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -34,16 +40,27 @@ export default function HomeScreen() {
 
   // 过滤游戏列表
   const filteredGames = useMemo(() => {
-    if (!searchText.trim()) {
-      return games;
+    let result = games;
+
+    // 按标签筛选
+    if (selectedTag) {
+      result = result.filter(game =>
+        game.tags?.some(tag => tag.slug === selectedTag)
+      );
     }
-    const keyword = searchText.toLowerCase().trim();
-    return games.filter(game =>
-      game.name.toLowerCase().includes(keyword) ||
-      game.description?.toLowerCase().includes(keyword) ||
-      game.gameKey.toLowerCase().includes(keyword)
-    );
-  }, [games, searchText]);
+
+    // 按搜索关键词筛选
+    if (searchText.trim()) {
+      const keyword = searchText.toLowerCase().trim();
+      result = result.filter(game =>
+        game.name.toLowerCase().includes(keyword) ||
+        game.description?.toLowerCase().includes(keyword) ||
+        game.gameKey.toLowerCase().includes(keyword)
+      );
+    }
+
+    return result;
+  }, [games, selectedTag, searchText]);
 
   // 计算卡片布局：使用容器实际宽度，优化移动端适配
   const getCardLayout = (index: number) => {
@@ -120,6 +137,50 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* 标签筛选 */}
+        {!loading && tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tagsScrollContent}
+            >
+              <TouchableOpacity
+                style={[styles.tagChip, !selectedTag && styles.tagChipActive]}
+                onPress={() => setSelectedTag(null)}
+                activeOpacity={0.7}
+              >
+                <ThemedText style={[styles.tagText, !selectedTag && styles.tagTextActive]}>
+                  全部
+                </ThemedText>
+              </TouchableOpacity>
+              {tags.map((tag) => (
+                <TouchableOpacity
+                  key={tag.id}
+                  style={[
+                    styles.tagChip,
+                    selectedTag === tag.slug && styles.tagChipActive,
+                    { borderColor: tag.color }
+                  ]}
+                  onPress={() => setSelectedTag(selectedTag === tag.slug ? null : tag.slug)}
+                  activeOpacity={0.7}
+                >
+                  <ThemedText style={styles.tagIcon}>{tag.icon}</ThemedText>
+                  <ThemedText style={[
+                    styles.tagText,
+                    selectedTag === tag.slug && styles.tagTextActive
+                  ]}>
+                    {tag.name}
+                  </ThemedText>
+                  {tag.gameCount !== undefined && (
+                    <ThemedText style={styles.tagCount}>({tag.gameCount})</ThemedText>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {loading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" />
@@ -130,7 +191,7 @@ export default function HomeScreen() {
         {error && (
           <View style={styles.errorContainer}>
             <ThemedText style={styles.errorText}>{error}</ThemedText>
-            <TouchableOpacity style={styles.retryButton} onPress={loadGames}>
+            <TouchableOpacity style={styles.retryButton} onPress={loadData}>
               <ThemedText style={styles.retryButtonText}>重试</ThemedText>
             </TouchableOpacity>
           </View>
@@ -183,6 +244,19 @@ export default function HomeScreen() {
                       <ThemedText style={[styles.gameDescription, isLarge && styles.largeGameDescription]}>
                         {game.description}
                       </ThemedText>
+                      {/* 游戏标签 */}
+                      {game.tags && game.tags.length > 0 && !isLarge && (
+                        <View style={styles.gameTagsContainer}>
+                          {game.tags.slice(0, 2).map((tag) => (
+                            <View
+                              key={tag.id}
+                              style={[styles.gameTag, { backgroundColor: tag.color + '30', borderColor: tag.color }]}
+                            >
+                              <ThemedText style={styles.gameTagText}>{tag.name}</ThemedText>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                       {isLarge && (
                         <View style={styles.featuredBadge}>
                           <ThemedText style={styles.featuredText}>推荐</ThemedText>
@@ -289,6 +363,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#3b82f6',
   },
+  // 标签筛选样式
+  tagsContainer: {
+    marginBottom: 20,
+  },
+  tagsScrollContent: {
+    paddingRight: 20,
+  },
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(128, 128, 128, 0.3)',
+    marginRight: 10,
+  },
+  tagChipActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
+  tagIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  tagText: {
+    fontSize: 14,
+    fontWeight: '500',
+    opacity: 0.8,
+  },
+  tagTextActive: {
+    color: '#ffffff',
+    opacity: 1,
+  },
+  tagCount: {
+    fontSize: 12,
+    marginLeft: 4,
+    opacity: 0.6,
+  },
   gamesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -371,6 +485,24 @@ const styles = StyleSheet.create({
     maxWidth: '70%',
     textAlign: 'left',
     lineHeight: 20,
+  },
+  // 游戏卡片标签样式
+  gameTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+    gap: 6,
+  },
+  gameTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  gameTagText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   featuredBadge: {
     position: 'absolute',
